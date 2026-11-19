@@ -1,7 +1,7 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WireGuard Quick Reference — keys, config, commands</title>
-<meta name="description" content="A practical WireGuard cheat sheet: generate keys, a minimal client/server wg0.conf, full-tunnel vs split-tunnel, and the wg/wg-quick commands you actually use.">
+<title>WireGuard Quick Reference: keys, config, commands, AllowedIPs and MTU pitfalls</title>
+<meta name="description" content="A practical WireGuard cheat sheet: generate keys, a minimal wg0.conf, full-tunnel vs split-tunnel, the wg/wg-quick commands, and two pitfalls measured on Linux 6.8: overlapping AllowedIPs and MTU over PPPoE.">
 <style>body{font:16px/1.6 system-ui,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;color:#1a1a1a}h1,h2{line-height:1.2}code,pre{background:#f4f4f5;border-radius:6px}pre{padding:14px;overflow:auto}code{padding:2px 5px}a{color:#0a66c2}.note{background:#eef6ff;border-left:4px solid #0a66c2;padding:10px 14px;border-radius:0 6px 6px 0}</style>
 </head><body>
 <h1>WireGuard Quick Reference</h1>
@@ -35,6 +35,19 @@ wg-quick down wg0</pre>
 <li><strong>Full-tunnel</strong> (<code>AllowedIPs = 0.0.0.0/0, ::/0</code>): all traffic, incl. DNS, goes through the tunnel. Best for privacy on untrusted Wi-Fi.</li>
 <li><strong>Split-tunnel</strong> (<code>AllowedIPs = 10.8.0.0/24</code>): only your private subnet is routed; the rest uses your normal connection.</li>
 </ul>
+
+<h2>5. Two pitfalls measured on a real kernel</h2>
+<p>Both were reproduced on Linux 6.8 with wireguard-tools 1.0.20210914, in throwaway network namespaces.</p>
+<ul>
+<li><strong>Same AllowedIPs range on two server peers.</strong> WireGuard keeps one owner per range: the peer configured last takes it, the first one shows <code>allowed ips: (none)</code> in <code>wg show</code> and silently stops receiving traffic. A <code>/32</code> inside another peer's <code>/24</code> is different: the most specific range wins, both peers keep working.</li>
+<li><strong>MTU 1420 behind PPPoE over IPv6.</strong> On a 1492-byte link with ICMPv6 "packet too big" filtered, a 2 MB TCP transfer through a tunnel at MTU 1420 received 0 bytes (2 runs out of 2). With <code>MTU = 1412</code> it completed. Over IPv4 the router fragmented and the transfer passed.</li>
+</ul>
+<pre>[Interface]
+MTU = 1412   # PPPoE uplink (1492) minus 80 bytes of WireGuard over IPv6</pre>
+<p>To catch these before <code>wg-quick up</code>, paste a <code>wg0.conf</code> into the free
+<a href="https://wg.vpnsmith.com/check?ref=gh-wqr">WireGuard config checker</a> (overlapping ranges, host bits, MTU, missing keepalive).
+To exclude your LAN or a single IP from a full tunnel, the <a href="https://wg.vpnsmith.com/allowedips?ref=gh-wqr">AllowedIPs calculator</a>
+computes the complement list for you.</p>
 
 <div class="note">
 <p>Want a config generated for you (keys + ready-to-paste <code>wg0.conf</code>, entirely in your browser, nothing sent to a server)? Use the free
